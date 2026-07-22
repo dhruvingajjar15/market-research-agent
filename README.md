@@ -7,7 +7,7 @@
 Five targeted searches. One structured analysis. Markdown and JSON you own.
 
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![OpenAI](https://img.shields.io/badge/Analysis-OpenAI-000000?style=flat&logo=openai&logoColor=white)](https://platform.openai.com/)
 [![Tavily](https://img.shields.io/badge/Search-Tavily-4F46E5?style=flat)](https://tavily.com/)
 [![CLI](https://img.shields.io/badge/Interface-CLI-4EAA25?style=flat&logo=gnubash&logoColor=white)](#usage)
