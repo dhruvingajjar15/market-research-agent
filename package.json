@@ -1,0 +1,44 @@
+{
+  "name": "market-research-agent",
+  "version": "1.0.0",
+  "description": "A reusable CLI that searches the web and creates structured market research reports.",
+  "type": "module",
+  "bin": {
+    "market-research-agent": "./dist/index.js",
+    "market-research": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    ".env.example",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "research": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "market-research",
+    "cli",
+    "openai",
+    "tavily"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "openai": "^4.57.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
