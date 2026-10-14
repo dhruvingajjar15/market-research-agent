@@ -2,10 +2,18 @@
   "name": "market-research-agent",
   "version": "1.0.0",
   "description": "A reusable CLI that searches the web and creates structured market research reports.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dhruvingajjar15/market-research-agent.git"
+  },
+  "homepage": "https://github.com/dhruvingajjar15/market-research-agent#readme",
+  "bugs": {
+    "url": "https://github.com/dhruvingajjar15/market-research-agent/issues"
+  },
   "type": "module",
   "bin": {
-    "market-research-agent": "./dist/index.js",
-    "market-research": "./dist/index.js"
+    "market-research-agent": "dist/index.js",
+    "market-research": "dist/index.js"
   },
   "files": [
     "dist",
@@ -14,13 +22,14 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "research": "tsx src/index.ts",
+    "research": "node --import tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
+    "prepublishOnly": "npm run typecheck && npm test",
     "prepare": "npm run build"
   },
   "keywords": [
@@ -34,11 +43,11 @@
     "access": "public"
   },
   "dependencies": {
-    "openai": "^4.57.0"
+    "openai": "^7.32.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "tsx": "^4.19.0",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

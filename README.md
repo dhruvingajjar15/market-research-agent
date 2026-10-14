@@ -6,7 +6,7 @@
 
 Five targeted searches. One structured analysis. Markdown and JSON you own.
 
-[![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![OpenAI](https://img.shields.io/badge/Analysis-OpenAI-000000?style=flat&logo=openai&logoColor=white)](https://platform.openai.com/)
 [![Tavily](https://img.shields.io/badge/Search-Tavily-4F46E5?style=flat)](https://tavily.com/)
@@ -40,18 +40,23 @@ Use it to explore any product, market, industry, audience, or customer problem. 
 
 ## Quick Start
 
-### 1. Install
+The npm registry release is pending, and these CLI fixes have not yet been pushed to the public GitHub repository. The GitHub install below will work after they are pushed. Until then, use [a local checkout](#local-development).
+
+### 1. Install the CLI
+
+Install [Node.js 22 or newer](https://nodejs.org/en/download) and [Git](https://git-scm.com/downloads), then run:
 
 ```bash
-npm install
-cp .env.example .env
+node --version
+git --version
+npm install --global github:dhruvingajjar15/market-research-agent
 ```
 
-On Windows Command Prompt, use `copy .env.example .env` for the second command.
+The shorter registry command, `npm install --global market-research-agent`, will work after the package is published to npm.
 
 ### 2. Add API keys
 
-Open `.env` and replace the example values:
+Create a `.env` file in the directory where you will run the command and add your keys:
 
 ```dotenv
 OPENAI_API_KEY=your-openai-api-key
@@ -61,15 +66,15 @@ TAVILY_API_KEY=your-tavily-api-key
 # OPENAI_MODEL=gpt-4o-mini
 ```
 
-You need [OpenAI](https://platform.openai.com/api-keys) and [Tavily](https://app.tavily.com/) API keys. Requests may incur charges from those providers.
+Get keys from [OpenAI](https://platform.openai.com/api-keys) and [Tavily](https://app.tavily.com/). You can also set `OPENAI_API_KEY` and `TAVILY_API_KEY` as shell environment variables instead of using `.env`. Keep your keys private. Requests may incur charges from those providers.
 
 ### 3. Run your first report
 
 ```bash
-npm run research -- competitor "meal planning apps for busy families"
+market-research-agent competitor "meal planning apps"
 ```
 
-The finished `.md` and `.json` files will appear in `reports/`.
+The finished Markdown (`.md`) and JSON (`.json`) reports are saved locally in `reports/` under the directory where you ran the command.
 
 ## Research Types
 
@@ -84,17 +89,14 @@ The finished `.md` and `.json` files will appear in `reports/`.
 
 ## Usage
 
-Use positional arguments:
+After installing the CLI, run it from any directory:
 
 ```bash
 market-research-agent <research-type> "<research-question>"
+market-research-agent trend "electric bike adoption"
 ```
 
-When working from this repository, run the same command through npm:
-
-```bash
-npm run research -- trend "electric bike adoption"
-```
+The shorter command `market-research` works too.
 
 Named and short flags work too:
 
@@ -121,8 +123,6 @@ See every option:
 
 ```bash
 market-research-agent --help
-# or
-npm run research -- --help
 ```
 
 ## How It Works
@@ -174,38 +174,30 @@ Every report includes:
 - Generated search queries
 - Search results and snippets
 
-Files use the research type and an ISO timestamp so consecutive runs do not overwrite one another:
+Files use the research type, an ISO timestamp, and a unique ID so consecutive runs do not overwrite one another:
 
 ```text
 reports/
-├── competitor-2026-07-22T14-30-00-000Z.json
-└── competitor-2026-07-22T14-30-00-000Z.md
+├── competitor-2026-07-22T14-30-00-000Z-550e8400-e29b-41d4-a716-446655440000.json
+└── competitor-2026-07-22T14-30-00-000Z-550e8400-e29b-41d4-a716-446655440000.md
 ```
 
-## Install as a Global CLI
+## Local Development
 
-The package exposes both `market-research-agent` and the shorter `market-research` command. After the repository is published on GitHub, install it directly by replacing `YOUR_USERNAME` below:
+To work from source, clone this repository and run the CLI from its directory:
 
 ```bash
-npm install --global github:YOUR_USERNAME/market-research-agent
-market-research-agent --help
-market-research trend "home fitness subscriptions"
+npm install
+cp .env.example .env
 ```
 
-Create a `.env` file in the directory where you run the CLI, or export `OPENAI_API_KEY` and `TAVILY_API_KEY` in your shell. Reports are saved relative to that working directory.
-
-The project also works with npm-compatible package managers:
+On Windows Command Prompt, use `copy .env.example .env`. Add your API keys to `.env`, then run:
 
 ```bash
-pnpm install
-pnpm research competitor "meal planning apps"
-
-yarn install
-yarn research competitor "meal planning apps"
-
-bun install
-bun run research -- competitor "meal planning apps"
+npm run research -- competitor "meal planning apps"
 ```
+
+`npm install` in a checkout installs its dependencies but does not add `market-research-agent` to your shell's command path. For a bare command from this checkout, run `npm run build` and then `npm install --global .` in the repository directory. If you use nvm, select the same Node.js version in later terminal sessions so the global command stays available.
 
 ## Project Structure
 
@@ -234,7 +226,7 @@ Generated `dist/` and `reports/` directories are intentionally excluded from sou
 [![OpenAI](https://img.shields.io/badge/OpenAI_SDK-000000?style=flat&logo=openai&logoColor=white)](https://github.com/openai/openai-node)
 [![Tavily](https://img.shields.io/badge/Tavily_API-4F46E5?style=flat)](https://docs.tavily.com/)
 
-- **Runtime:** Node.js 18 or newer
+- **Runtime:** Node.js 22 or newer
 - **Language:** TypeScript with strict type checking
 - **Web search:** Tavily Search API
 - **Analysis:** OpenAI SDK; `gpt-4o-mini` by default, configurable with `OPENAI_MODEL`

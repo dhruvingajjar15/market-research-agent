@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -517,10 +518,10 @@ async function fetchTavilyResults(query: string) {
     response = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${tavilyApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        api_key: tavilyApiKey,
         query,
         search_depth: "basic",
         max_results: 5,
@@ -544,19 +545,21 @@ async function fetchTavilyResults(query: string) {
     throw new Error(`Tavily returned invalid JSON for query "${query}": ${getErrorMessage(error)}`);
   }
 
-  const rawResults = isRecord(payload) && Array.isArray(payload.results) ? payload.results : [];
+  if (!isRecord(payload) || !Array.isArray(payload.results)) {
+    throw new Error(`Tavily returned malformed results for query "${query}": expected a results array.`);
+  }
 
   return {
-    results: rawResults.flatMap((item) => {
+    results: payload.results.map((item, index) => {
       if (!isRecord(item) || typeof item.url !== "string" || !item.url.trim()) {
-        return [];
+        throw new Error(`Tavily returned a malformed result for query "${query}" at index ${index}: expected a non-empty URL.`);
       }
 
-      return [{
+      return {
         title: normalizeString(item.title, "Untitled result"),
         url: item.url.trim(),
         snippet: normalizeString(item.content, "No snippet provided.").slice(0, MAX_SEARCH_SNIPPET_LENGTH),
-      }];
+      };
     }).slice(0, 5),
     source: "api" as const,
   };
@@ -592,7 +595,7 @@ Return JSON only with these fields:
 Base every finding and recommendation on the research question and supplied search evidence. Do not assume a specific company, founder, product, industry, or audience unless the research question identifies it. Clearly reflect uncertainty when the evidence is incomplete or conflicting.
 `;
 
-  let content: string;
+  let content: string | null | undefined;
 
   try {
     const response = await client.chat.completions.create({
@@ -600,9 +603,13 @@ Base every finding and recommendation on the research question and supplied sear
       temperature: 0.2,
       messages: [{ role: "system", content: "You produce concise market research summaries." }, { role: "user", content: prompt }],
     });
-    content = response.choices[0]?.message?.content ?? "{}";
+    content = response.choices?.[0]?.message?.content;
   } catch (error) {
     throw new Error(`OpenAI analysis request failed: ${getErrorMessage(error)}`);
+  }
+
+  if (typeof content !== "string" || !content.trim()) {
+    throw new Error("OpenAI analysis returned no text content. No report was saved.");
   }
 
   let parsed: unknown;
@@ -611,6 +618,10 @@ Base every finding and recommendation on the research question and supplied sear
     parsed = parseJsonResponseContent(content);
   } catch (error) {
     throw new Error(`OpenAI analysis response was not valid JSON: ${getErrorMessage(error)}. Response started with: ${content.slice(0, 160)}`);
+  }
+
+  if (!isRecord(parsed) || typeof parsed.executiveSummary !== "string" || !parsed.executiveSummary.trim()) {
+    throw new Error("OpenAI analysis returned no executive summary. No report was saved.");
   }
 
   return normalizeAnalysisResponse(parsed);
@@ -730,8 +741,9 @@ async function writeReportFiles(report: ResearchReport, outputDir: string) {
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const safeType = report.researchType.replace(/_/g, "-");
-  const jsonPath = path.join(outputDir, `${safeType}-${timestamp}.json`);
-  const markdownPath = path.join(outputDir, `${safeType}-${timestamp}.md`);
+  const reportId = `${safeType}-${timestamp}-${randomUUID()}`;
+  const jsonPath = path.join(outputDir, `${reportId}.json`);
+  const markdownPath = path.join(outputDir, `${reportId}.md`);
 
   const reportWithPaths = {
     ...report,
@@ -741,8 +753,8 @@ async function writeReportFiles(report: ResearchReport, outputDir: string) {
     },
   };
 
-  await writeFile(jsonPath, JSON.stringify(reportWithPaths, null, 2));
-  await writeFile(markdownPath, renderMarkdown(reportWithPaths));
+  await writeFile(jsonPath, JSON.stringify(reportWithPaths, null, 2), { flag: "wx" });
+  await writeFile(markdownPath, renderMarkdown(reportWithPaths), { flag: "wx" });
 
   return reportWithPaths;
 }
@@ -810,10 +822,19 @@ async function main() {
   }
 }
 
-const entryPoint = process.argv[1] ? path.resolve(process.argv[1]) : "";
-const currentFile = path.resolve(fileURLToPath(import.meta.url));
+function isDirectExecution() {
+  if (!process.argv[1]) {
+    return false;
+  }
 
-if (entryPoint && entryPoint === currentFile) {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectExecution()) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
