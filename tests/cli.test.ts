@@ -22,6 +22,7 @@ import {
   validateApiConfiguration,
   validateResearchInput,
 } from "../src/index.ts";
+import { exportSavedReport, parseExportArgs } from "../src/export.ts";
 
 function setEnvironment(t: TestContext, entries: Record<string, string | undefined>) {
   const previous = Object.fromEntries(Object.keys(entries).map((key) => [key, process.env[key]]));
@@ -185,34 +186,61 @@ test("parseArgs supports positional and named research arguments", () => {
     researchType: "mvp",
     researchQuestion: "AI-assisted writing",
     outputDir: "reports",
+    includeDocx: false,
   });
 
   assert.deepEqual(parseArgs(["--research-type=trend", "--research-question", "mood-based posting"]), {
     researchType: "trend",
     researchQuestion: "mood-based posting",
     outputDir: "reports",
+    includeDocx: false,
   });
 
   assert.deepEqual(parseArgs(["-t", "customer_pain", "-q", "-private sharing concerns"]), {
     researchType: "customer_pain",
     researchQuestion: "-private sharing concerns",
     outputDir: "reports",
+    includeDocx: false,
   });
 
   assert.deepEqual(parseArgs(["competitor", "coffee shops", "--output-dir", "custom-reports"]), {
     researchType: "competitor",
     researchQuestion: "coffee shops",
     outputDir: "custom-reports",
+    includeDocx: false,
   });
 
   assert.deepEqual(parseArgs(["--research-type", "trend", "electric", "bikes"]), {
     researchType: "trend",
     researchQuestion: "electric bikes",
     outputDir: "reports",
+    includeDocx: false,
+  });
+
+  assert.deepEqual(parseArgs(["trend", "electric bikes", "--format=docx"]), {
+    researchType: "trend",
+    researchQuestion: "electric bikes",
+    outputDir: "reports",
+    includeDocx: true,
   });
 
   assert.throws(() => parseArgs(["competitor", "coffee shops", "--unknown"]), /Unknown option/);
   assert.throws(() => parseArgs(["--research-type="]), /requires a value/);
+  assert.throws(() => parseArgs(["trend", "electric bikes", "--format", "doc"]), /Unsupported report format/);
+});
+
+test("parseExportArgs accepts a saved JSON report and requires genuine DOCX output", () => {
+  assert.deepEqual(parseExportArgs(["reports/example.json"]), {
+    reportPath: "reports/example.json",
+    outputPath: "reports/example.docx",
+  });
+  assert.deepEqual(parseExportArgs(["reports/example.json", "--output", "other/report.docx"]), {
+    reportPath: "reports/example.json",
+    outputPath: "other/report.docx",
+  });
+  assert.throws(() => parseExportArgs([]), /saved JSON report path is required/);
+  assert.throws(() => parseExportArgs(["reports/example.md"]), /saved \.json report/);
+  assert.throws(() => parseExportArgs(["reports/example.json", "--output", "report.doc"]), /legacy \.doc format is not supported/);
 });
 
 test("help helpers identify help requests and print usage", () => {
@@ -222,6 +250,8 @@ test("help helpers identify help requests and print usage", () => {
   assert.match(getUsageText(), /market-research-agent/);
   assert.match(getUsageText(), /npm run research/);
   assert.match(getUsageText(), /Supported research types/);
+  assert.match(getUsageText(), /--format docx/);
+  assert.match(getUsageText(), /export <report\.json>/);
 });
 
 test("a symlinked CLI entrypoint prints help", (t) => {
@@ -453,4 +483,46 @@ test("runResearch writes distinct JSON and Markdown reports when timestamps matc
   assert.equal(readdirSync(outputDir).length, 4);
   assert.equal(calls.tavily, 10);
   assert.equal(calls.openAi, 2);
+});
+
+test("DOCX research output and saved-report export create Word files without overwriting", async (t) => {
+  setEnvironment(t, { OPENAI_API_KEY: "test-openai", TAVILY_API_KEY: "test-tavily" });
+  const outputDir = createTemporaryReportDirectory(t);
+  mockResearchApis(t);
+
+  const report = await runResearch("trend", "electric bikes", outputDir, { includeDocx: true });
+  const docxPath = report.reportPaths.docx;
+  assert.ok(docxPath);
+  assert.equal(path.parse(docxPath).name, path.parse(report.reportPaths.json).name);
+  assert.equal(readFileSync(docxPath).subarray(0, 2).toString("ascii"), "PK");
+  assert.equal(JSON.parse(readFileSync(report.reportPaths.json, "utf8")).reportPaths.docx, docxPath);
+
+  const copiedPath = path.join(outputDir, "saved-report.docx");
+  await exportSavedReport(report.reportPaths.json, copiedPath);
+  assert.equal(readFileSync(copiedPath).subarray(0, 2).toString("ascii"), "PK");
+  await assert.rejects(exportSavedReport(report.reportPaths.json, copiedPath), /Output already exists/);
+
+  const cliPath = path.join(outputDir, "cli-export.docx");
+  const sourcePath = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+  const result = spawnSync(process.execPath, ["--import", "tsx", sourcePath, "export", report.reportPaths.json, "--output", cliPath], {
+    encoding: "utf8",
+    cwd: path.dirname(path.dirname(sourcePath)),
+    env: { ...process.env, OPENAI_API_KEY: "", TAVILY_API_KEY: "" },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Saved Word report:/);
+  assert.equal(readFileSync(cliPath).subarray(0, 2).toString("ascii"), "PK");
+});
+
+test("saved-report export explains invalid JSON and invalid report data", async (t) => {
+  const outputDir = createTemporaryReportDirectory(t);
+  const reportPath = path.join(outputDir, "invalid.json");
+  const docxPath = path.join(outputDir, "invalid.docx");
+
+  writeFileSync(reportPath, "not JSON", "utf8");
+  await assert.rejects(exportSavedReport(reportPath, docxPath), /Invalid JSON report/);
+
+  writeFileSync(reportPath, JSON.stringify({ researchQuestion: "incomplete" }), "utf8");
+  await assert.rejects(exportSavedReport(reportPath, docxPath), /not a valid Market Research Agent report/);
+  assert.deepEqual(readdirSync(outputDir), ["invalid.json"]);
 });

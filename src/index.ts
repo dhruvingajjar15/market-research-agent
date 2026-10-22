@@ -52,6 +52,7 @@ export interface ResearchReport {
   reportPaths: {
     json: string;
     markdown: string;
+    docx?: string;
   };
 }
 
@@ -338,7 +339,7 @@ export function validateSources(sourcesUsed: SourceUsed[]) {
 
 export const buildValidationWarnings = validateSources;
 
-type ParsedFlagName = "researchType" | "researchQuestion" | "outputDir";
+type ParsedFlagName = "researchType" | "researchQuestion" | "outputDir" | "format";
 
 function normalizeFlagName(rawName: string): ParsedFlagName | undefined {
   const normalizedName = rawName.trim().toLowerCase();
@@ -353,6 +354,10 @@ function normalizeFlagName(rawName: string): ParsedFlagName | undefined {
 
   if (normalizedName === "outputdir" || normalizedName === "output-dir" || normalizedName === "o") {
     return "outputDir";
+  }
+
+  if (normalizedName === "format" || normalizedName === "f") {
+    return "format";
   }
 
   return undefined;
@@ -419,11 +424,17 @@ export function parseArgs(argv: string[]) {
   const researchType = flags.get("researchType") ?? positional[positionalIndex++] ?? "";
   const researchQuestion = flags.get("researchQuestion") ?? positional.slice(positionalIndex).join(" ");
   const outputDir = flags.get("outputDir") ?? "reports";
+  const format = flags.get("format")?.toLowerCase();
+
+  if (format !== undefined && format !== "docx") {
+    throw new Error(`Unsupported report format: ${format}. Use docx for a Word document.`);
+  }
 
   return {
     researchType,
     researchQuestion,
     outputDir,
+    includeDocx: format === "docx",
   };
 }
 
@@ -438,12 +449,17 @@ export function getUsageText() {
     "Usage:",
     '  market-research-agent <researchType> "<researchQuestion>"',
     '  npm run research -- <researchType> "<researchQuestion>"',
+    "  market-research-agent export <report.json> [--output <file.docx>]",
+    "  market-research-agent view [--output-dir <path>] [--port <number>]",
     "",
     "Options:",
     "  -t, --research-type <type>       Research type",
     "  -q, --research-question <text>  Research question",
     "  -o, --output-dir <path>         Report directory (default: reports)",
+    "  -f, --format docx              Also save a formatted Word document",
     "  -h, --help                      Show this help",
+    "  export                          Create a DOCX from a saved JSON report",
+    "  view                            Open a local browser viewer for saved reports",
     "",
     `Supported research types: ${SUPPORTED_RESEARCH_TYPES.join(", ")}`,
     "",
@@ -451,6 +467,8 @@ export function getUsageText() {
     '  market-research-agent competitor "meal planning apps"',
     '  market-research-agent customer_pain "online language learning"',
     '  market-research-agent --research-type=mvp --research-question="personal finance tools"',
+    '  market-research-agent trend "electric bikes" --format docx',
+    '  market-research-agent export reports/example.json',
   ].join("\n");
 }
 
@@ -736,7 +754,7 @@ export function renderMarkdown(report: ResearchReport) {
   ].join("\n");
 }
 
-async function writeReportFiles(report: ResearchReport, outputDir: string) {
+async function writeReportFiles(report: ResearchReport, outputDir: string, includeDocx = false) {
   await mkdir(outputDir, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -744,22 +762,35 @@ async function writeReportFiles(report: ResearchReport, outputDir: string) {
   const reportId = `${safeType}-${timestamp}-${randomUUID()}`;
   const jsonPath = path.join(outputDir, `${reportId}.json`);
   const markdownPath = path.join(outputDir, `${reportId}.md`);
+  const docxPath = includeDocx ? path.join(outputDir, `${reportId}.docx`) : undefined;
 
-  const reportWithPaths = {
+  const reportWithPaths: ResearchReport = {
     ...report,
     reportPaths: {
       json: jsonPath,
       markdown: markdownPath,
+      ...(docxPath ? { docx: docxPath } : {}),
     },
   };
 
+  const docxBuffer = docxPath
+    ? await (await import("./docx.js")).renderDocx(reportWithPaths)
+    : undefined;
   await writeFile(jsonPath, JSON.stringify(reportWithPaths, null, 2), { flag: "wx" });
   await writeFile(markdownPath, renderMarkdown(reportWithPaths), { flag: "wx" });
+  if (docxPath && docxBuffer) {
+    await writeFile(docxPath, docxBuffer, { flag: "wx" });
+  }
 
   return reportWithPaths;
 }
 
-export async function runResearch(researchType: string, researchQuestion: string, outputDir = "reports") {
+export async function runResearch(
+  researchType: string,
+  researchQuestion: string,
+  outputDir = "reports",
+  options: { includeDocx?: boolean } = {},
+) {
   loadEnvironment();
   const validatedInput = validateResearchInput(researchType, researchQuestion);
   validateApiConfiguration();
@@ -790,12 +821,34 @@ export async function runResearch(researchType: string, researchQuestion: string
     },
   };
 
-  const reportWithPaths = await writeReportFiles(report, outputDir);
+  const reportWithPaths = await writeReportFiles(report, outputDir, options.includeDocx);
   return reportWithPaths;
 }
 
 async function main() {
   const argv = process.argv.slice(2);
+
+  if (argv[0] === "export") {
+    try {
+      const { runExportCli } = await import("./export.js");
+      await runExportCli(argv.slice(1));
+    } catch (error) {
+      console.error(`Error: ${getErrorMessage(error)}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (argv[0] === "view") {
+    try {
+      const { runViewerCli } = await import("./viewer.js");
+      await runViewerCli(argv.slice(1));
+    } catch (error) {
+      console.error(`Error: ${getErrorMessage(error)}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   if (isHelpRequest(argv)) {
     console.log(getUsageText());
@@ -803,7 +856,7 @@ async function main() {
   }
 
   try {
-    const { researchType, researchQuestion, outputDir } = parseArgs(argv);
+    const { researchType, researchQuestion, outputDir, includeDocx } = parseArgs(argv);
 
     if (!researchType || !researchQuestion) {
       console.error(getUsageText());
@@ -811,7 +864,7 @@ async function main() {
       return;
     }
 
-    const report = await runResearch(researchType, researchQuestion, outputDir);
+    const report = await runResearch(researchType, researchQuestion, outputDir, { includeDocx });
     for (const warning of report.validationWarnings) {
       console.warn(`Warning: ${warning}`);
     }

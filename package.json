@@ -17,6 +17,7 @@
   },
   "files": [
     "dist",
+    "docs",
     ".env.example",
     "README.md",
     "LICENSE"
@@ -27,6 +28,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "research": "node --import tsx src/index.ts",
+    "view": "node --import tsx src/index.ts view",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run typecheck && npm test",
@@ -43,6 +45,8 @@
     "access": "public"
   },
   "dependencies": {
+    "docx": "9.7.1",
+    "docx-preview": "0.4.1",
     "openai": "^7.32.0"
   },
   "devDependencies": {
